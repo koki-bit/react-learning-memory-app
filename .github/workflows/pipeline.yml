@@ -1,0 +1,46 @@
+name: Build, Test, and Deploy to Firebase
+
+on:
+  push:
+    branches:
+      - main
+
+# 【重要】OIDCトークンを発行してWIFによるキーレス認証を行うために必須の設定
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test -- --run
+
+      - name: Build application
+        run: npm run build
+
+      # 1. サービスアカウントのJSONキーではなく、WIFを使ってGoogle Cloudの認証を通過する
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.SERVICE_ACCOUNT }}
+
+      # 2. 認証済みセッションを利用してFirebaseへデプロイを実行する
+      - name: Deploy to Firebase Hosting
+        run: npx firebase-tools deploy --only hosting --project ${{ vars.FIREBASE_PROJECT_ID }}
